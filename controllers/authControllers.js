@@ -1,5 +1,6 @@
 const { Conflict, Unauthorized } = require('http-errors')
 const jwt = require('jsonwebtoken')
+const gravatar = require('gravatar')
 
 const HTTP_CODES = require('../helpers/httpCodes')
 const { User } = require('../models/user')
@@ -13,16 +14,20 @@ const signup = async(req, res) => {
     throw new Conflict(`User with ${email} already exist`)
   }
 
-  const newUser = new User({ name, email })
+  const avatarURL = gravatar.url(email)
+
+  const newUser = new User({ name, email, avatarURL })
   newUser.setPassword(password)
   newUser.save()
+
   res.status(HTTP_CODES.CREATED).json({
     status: 'success',
     code: 201,
     data: {
       user: {
         email,
-        name
+        name,
+        avatarURL
       }
     }
   })
