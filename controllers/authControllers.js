@@ -1,24 +1,39 @@
 const { Conflict, Unauthorized } = require('http-errors')
 const jwt = require('jsonwebtoken')
 const gravatar = require('gravatar')
+const { nanoid } = require('nanoid')
 
 const HTTP_CODES = require('../helpers/httpCodes')
+const { sendEmail } = require('../helpers/sendEmail')
 const { User } = require('../models/user')
 
 const { SECRET_KEY } = process.env
 
 const signup = async(req, res) => {
   const { name, email, password } = req.body
+
   const user = await User.findOne({ email })
   if (user) {
     throw new Conflict(`User with ${email} already exist`)
   }
 
+  const verificationToken = nanoid()
   const avatarURL = gravatar.url(email)
 
-  const newUser = new User({ name, email, avatarURL })
+  const newUser = new User({
+    name, email, avatarURL, verificationToken
+  })
   newUser.setPassword(password)
-  newUser.save()
+
+  await newUser.save()
+
+  const mail = {
+    to: email,
+    subject: 'Confirm email',
+    html: `<a target='_blank' href='http://localhost:3000/api/users/verify/${verificationToken}'>Click for email confirmation</a>`
+  }
+
+  await sendEmail(mail)
 
   res.status(HTTP_CODES.CREATED).json({
     status: 'success',
@@ -27,7 +42,8 @@ const signup = async(req, res) => {
       user: {
         email,
         name,
-        avatarURL
+        avatarURL,
+        verificationToken
       }
     }
   })
@@ -35,10 +51,9 @@ const signup = async(req, res) => {
 
 const signin = async(req, res) => {
   const { email, password } = req.body
-  console.log(password)
   const user = await User.findOne({ email })
-  if (!user || !user.comparePassword(password)) {
-    throw new Unauthorized('Email or password is wrong')
+  if (!user || !user.verify || !user.comparePassword(password)) {
+    throw new Unauthorized('Email or password is wrong or email is not verify')
   }
 
   const payload = {

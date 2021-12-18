@@ -2,6 +2,9 @@ const { User } = require('../models')
 const path = require('path')
 const fs = require('fs/promises')
 const Jimp = require('jimp')
+const { NotFound } = require('http-errors')
+const { sendEmail } = require('../helpers/sendEmail')
+const HTTP_CODES = require('../helpers/httpCodes')
 
 const getCurrent = async(req, res) => {
   const { name, email } = req.user
@@ -42,7 +45,53 @@ const updateAvatar = async (req, res) => {
   }
 }
 
+const verifyEmail = async (req, res) => {
+  const { verificationToken } = req.params
+  const user = await User.findOne({ verificationToken })
+  if (!user) {
+    throw NotFound()
+  }
+
+  await User.findByIdAndUpdate(user._id, { verify: true, verificationToken: null })
+
+  res.json({
+    message: 'Verify success'
+  })
+}
+
+const resendVerifyEmail = async (req, res) => {
+  const { email } = req.body
+  const user = await User.findOne({ email })
+
+  if (user.verify) {
+    throw new Error('Verification has already been passed')
+  }
+
+  const verificationToken = user.verificationToken
+
+  const mail = {
+    to: email,
+    subject: 'Confirm email',
+    html: `<a target='_blank' href='http://localhost:3000/api/users/verify/${verificationToken}'>Click for email confirmation</a>`
+  }
+
+  await sendEmail(mail)
+
+  res.status(HTTP_CODES.OK).json({
+    status: 'success',
+    code: 200,
+    data: {
+      user: {
+        email,
+      }
+    },
+    message: 'Verification email sent'
+  })
+}
+
 module.exports = {
   getCurrent,
-  updateAvatar
+  updateAvatar,
+  verifyEmail,
+  resendVerifyEmail
 }
